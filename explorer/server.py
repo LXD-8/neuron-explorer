@@ -1911,7 +1911,10 @@ def _prepare_dsh():
             version = _dsh_version(binary)
         except Exception as e:
             return {"error": f"DSH: {e}", "code": "dsh_profile"}
-        env = {**os.environ, "DSH_HOME": home}
+        # The installer runs package install scripts from the registry, so it gets the profile's home and nothing
+        # else secret: the API key and the neuronary token go to the turn's child process only.
+        env = {k: v for k, v in os.environ.items() if k not in ("DEEPSEEK_API_KEY", "NEURONARY_TOKEN")}
+        env["DSH_HOME"] = home
         dep = "@deepseek-ai/dsh-mcp-client"
 
         def install():
