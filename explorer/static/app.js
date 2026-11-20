@@ -1,6 +1,6 @@
 import { createMap } from "./map3d.js?v=78";
 import { createScatter } from "./scatter.js?v=39";
-import { t, tp, initI18n, applyTranslations, getLang, localizeError } from "./i18n.js?v=6";
+import { t, tp, initI18n, applyTranslations, getLang, localizeError } from "./i18n.js?v=7";
 
 const $ = s => document.querySelector(s);
 const api = async (p, body) => {
@@ -1026,6 +1026,9 @@ const updateErrKey = code => ({
   "update.timeout": "update.timeout",
   "update.git_failed": "update.gitFailed",
   "update.apply_failed": "update.applyFailed",
+  "update.bad_upstream": "update.badUpstream",
+  "update.no_rollback": "update.noRollback",
+  "update.lock_failed": "update.lockFailed",
 }[code] || null);
 
 function updateErrorText(r) {
@@ -1074,7 +1077,7 @@ function openUpdateDialog(info) {
       <span>${esc(t("update.latest"))} <b>${esc(latest)}</b></span>
       <span>${esc(t("update.branch"))} <b>${esc(info.branch || "main")}</b></span></div>
     ${warnings.length ? `<div class="u-warn">${warnings.map(w => `<div>${esc(w)}</div>`).join("")}</div>` : ""}
-    <div class="u-count">${esc(t("update.commits", { n: info.count || 0 }))}</div>
+    <div class="u-count">${esc(tp("update.commits", info.count || 0, { n: info.count || 0 }))}</div>
     <div id="u-status" class="u-status"></div>`,
     `<button id="u-later">${esc(t("update.cancel"))}</button>
      <button id="u-apply" class="primary" ${canApply ? "" : "disabled"}>${esc(t("update.apply"))}</button>`);
@@ -1109,7 +1112,7 @@ async function checkUpdates() {
   }
 }
 
-async function waitForServer(oldBoot) {
+async function waitForServer(oldBoot, previous) {
   // The process is re-exec'd: wait until the boot id changes, then reload.  A plain
   // 200 is not enough — the old process still answers until execve replaces it.
   await new Promise(r => setTimeout(r, 1500));
@@ -1124,7 +1127,11 @@ async function waitForServer(oldBoot) {
     await new Promise(r => setTimeout(r, 600));
   }
   const status = $("#u-status");
-  if (status) status.textContent = t("update.restartManual");
+  if (status) {
+    status.textContent = t("update.restartManual") +
+      (previous ? " " + t("update.revert", { sha: shortSHA(previous) }) : "");
+    status.classList.add("err");
+  }
 }
 
 async function applyUpdate() {
@@ -1143,6 +1150,7 @@ async function applyUpdate() {
       return;
     }
     updateBusy = false;
+    const previous = r.previous || "";  // the commit this update replaced, named if the new one does not start
     if (status) {
       status.textContent = r.deps_ok === false
         ? t("update.depsWarning", { error: r.deps_error || "" }) + " " + t("update.restarting")
@@ -1151,9 +1159,13 @@ async function applyUpdate() {
     if (apply) apply.textContent = t("update.applying");
     try {
       const rr = await api("/api/update/restart", {});
-      waitForServer(rr.boot || "");
+      if (rr && rr.ok === false) throw new Error(updateErrorText(rr));  // e.g. another update is still running
+      waitForServer(rr.boot || "", previous);
     } catch (err) {
-      if (status) status.textContent = t("update.restartManual") + " " + err.message;
+      if (status) {
+        status.textContent = t("update.restartManual") +
+          (previous ? " " + t("update.revert", { sha: shortSHA(previous) }) : "") + " " + err.message;
+      }
       if (later) later.disabled = false;
     }
   } catch (err) {

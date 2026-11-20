@@ -51,6 +51,20 @@ clone for testing; it defaults to the author's GitHub repository. This requires 
 the upstream branch you are updating to (i.e. after this change is merged); before that, it will correctly report
 that the checkout is already up to date or that local commits exist.
 
+Because an update replaces the code that is running, the source and the result are checked:
+
+- **Source**: only `https`, `ssh` and local paths are accepted (`http` only for `127.0.0.1`). Git's `ext::` transport
+  runs a command, so it and any value that looks like a git flag are refused before git is called.
+- **Result**: the fast-forward is verified — if `HEAD` is not the fetched tip afterwards, the checkout is put back and
+  the update is reported as failed.
+- **Rollback**: a failed `uv sync` restores the previous commit, and the commit an update came from is recorded in
+  `.git/explorer-update.json`. If the new code does not start, roll back with
+  `curl -X POST http://127.0.0.1:8791/api/update/rollback` (or `git reset --hard <previous>` plus `uv sync`); the
+  dialog names that commit when the restart does not come up.
+- **One at a time**: applies take a lock in the git directory, so a second one — even from another explorer process on
+  the same checkout — is refused instead of rolling the first one back, and a restart is refused while an update is
+  running so the process is never re-exec'd in the middle of a `uv sync`.
+
 ## Sweep
 
 Runs on a CUDA 13 GPU pod with the steering fork of vLLM ([RhizoNymph/vllm](https://github.com/RhizoNymph/vllm)).

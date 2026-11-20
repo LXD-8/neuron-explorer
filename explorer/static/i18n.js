@@ -209,7 +209,8 @@ const en = {
   "update.current": "current",
   "update.latest": "latest",
   "update.branch": "branch",
-  "update.commits": "{n} new commits",
+  "update.commits_one": "{n} new commit",
+  "update.commits_other": "{n} new commits",
   "update.apply": "Update and restart",
   "update.cancel": "Later",
   "update.applying": "Updating…",
@@ -231,6 +232,10 @@ const en = {
   "update.depsWarning": "Code updated, but dependency sync failed: {error}",
   "update.depsFailed": "Dependency sync failed; the update was rolled back: {error}",
   "update.busy": "Another update is already running; wait for it to finish.",
+  "update.badUpstream": "The update source is not a usable git remote: {error}",
+  "update.noRollback": "There is no update to roll back: {error}",
+  "update.lockFailed": "Could not take the update lock: {error}",
+  "update.revert": "If it does not start, roll back with git reset --hard {sha}.",
 
   "status.other": "{raw}",
 
@@ -457,7 +462,8 @@ const zh = {
   "update.current": "当前",
   "update.latest": "最新",
   "update.branch": "分支",
-  "update.commits": "{n} 个新提交",
+  "update.commits_one": "{n} 个新提交",
+  "update.commits_other": "{n} 个新提交",
   "update.apply": "更新并重启",
   "update.cancel": "以后再说",
   "update.applying": "正在更新…",
@@ -479,6 +485,10 @@ const zh = {
   "update.depsWarning": "代码已更新，但依赖同步失败：{error}",
   "update.depsFailed": "依赖同步失败，已回滚到旧版本：{error}",
   "update.busy": "另一个更新正在进行，请等它完成。",
+  "update.badUpstream": "更新来源不是一个可用的 git 远端：{error}",
+  "update.noRollback": "没有可回滚的更新：{error}",
+  "update.lockFailed": "无法取得更新锁：{error}",
+  "update.revert": "若无法启动，可执行 git reset --hard {sha} 回滚。",
 
   "status.other": "状态：{raw}",
 

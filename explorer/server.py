@@ -23,7 +23,8 @@ sys.path.insert(0, os.path.join(ROOT, "sweep"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rank import compute_units  # noqa: E402
 from runtime import CACHE, MODEL, NO_MODEL, Runtime  # noqa: E402
-from update import UpdateError, apply_update, check as update_check  # noqa: E402
+from update import (UpdateError, apply_update, acquire_lock, check as update_check,  # noqa: E402
+                    drop_lock, rollback_update, status as update_state)
 
 RUNS, STATS = os.path.join(ROOT, "runs"), os.path.join(ROOT, "stats")
 # the agent's neuronary.org tools (agent_mcp.py) read the person's token from here when set
@@ -38,6 +39,7 @@ ARCH = {"n_layers": _cfg.num_hidden_layers, "hidden": _cfg.hidden_size, "inter":
 
 app = FastAPI()
 BOOT_ID = uuid.uuid4().hex  # changes on /api/update/restart so the page can tell when new code is live
+_restart_lock = []  # the update lock, held from /api/update/restart until execve (or released if that fails)
 
 
 # only this machine's own pages and tools: a page on another site (or a DNS name rebound to 127.0.0.1) can't reach
@@ -1926,20 +1928,45 @@ def api_update_apply():
         return {"ok": False, "error": str(e)}
 
 
+@app.post("/api/update/rollback")
+def api_update_rollback():
+    """Undo the last applied update and resync dependencies; for a version that does not start or is in the way."""
+    try:
+        return rollback_update()
+    except UpdateError as e:
+        return {"ok": False, "code": e.code, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.get("/api/update/status")
 def api_update_status():
     """The boot id changes only when the process is re-exec'd (or manually restarted)."""
-    return {"ok": True, "boot": BOOT_ID, "pid": os.getpid()}
+    return {"ok": True, "boot": BOOT_ID, "pid": os.getpid(), **update_state()}
 
 
 @app.post("/api/update/restart")
 def api_update_restart():
-    """Re-exec this server after the response has been sent, so new code and static files load."""
+    """Re-exec this server after the response has been sent, so new code and static files load.
+
+    Refused while an update is running: execve would end the process in the middle of its `uv sync`, leaving the
+    checkout on the new commit with half-installed dependencies.  The lock is held until execve replaces the
+    process, which closes the descriptor and releases it in the kernel; only a failed exec releases it here."""
     import time
+    try:
+        hold = acquire_lock()
+    except UpdateError as e:
+        return {"ok": False, "code": e.code, "error": str(e)}
+    _restart_lock.append(hold)  # keep the descriptor alive: the request ends before the exec
     def go():
         time.sleep(0.8)
         env = {**os.environ, "PORT": str(PORT)}
-        os.execve(sys.executable, [sys.executable, os.path.join(ROOT, "explorer", "server.py")], env)
+        try:
+            os.execve(sys.executable, [sys.executable, os.path.join(ROOT, "explorer", "server.py")], env)
+        finally:
+            # reached only when execve raised: this process is still here, so give the lock back
+            _restart_lock.clear()
+            drop_lock(hold)
     threading.Thread(target=go, daemon=True).start()
     return {"ok": True, "boot": BOOT_ID}
 
